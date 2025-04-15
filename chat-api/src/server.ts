@@ -50,6 +50,19 @@ app.post(
         });
       }
 
+      // Check if user exists in the database
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId)); // "eq" is like we say "=", dizzle thing idk
+
+      if (!existingUser.length) {
+        console.log(
+          `User ${userId} does not exist in the database. Adding them...`
+        );
+        await db.insert(users).values({ id: userId, name: username, email });
+      }
+
       return res.status(200).json({ userId, username, email });
     } catch (error) {
       console.error("Error creating user:", error);
@@ -72,6 +85,14 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+    if (!existingUser.length) {
+      return res.status(404).json({ error: "User not found in database, please register first with /register-user" });
+    }
+
     const geminiResponse = await runGemini(message);
     console.log("Gemini response:", geminiResponse);
 
@@ -86,6 +107,9 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
       if (err.code !== 16) throw err;
     });
 
+    // save chat message to the database
+    await db.insert(chats).values({ user_id: userId, message: message, reply: geminiResponse });
+
     // Send Gemini response to the channel
     await channel.sendMessage({
       text: geminiResponse,
@@ -99,7 +123,28 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
   }
 });
 
-const port = process.env.PORT || 3000;
+// Get chat history for a user 
+app.post("/get-messages", async (req: Request, res: Response): Promise<any> => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required" });
+  }
+  try { 
+    const chatHistory = await db
+      .select()
+      .from(chats)
+      .where(eq(chats.user_id, userId))
+
+    return res.status(200).json({ chatHistory });
+  }
+  catch (error) {
+    console.error("Error fetching chat history:", error);
+    return res.status(500).json({ error: "Failed to fetch chat history" });
+  }
+});
+
+const port = process.env.PORT || 8000;
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);

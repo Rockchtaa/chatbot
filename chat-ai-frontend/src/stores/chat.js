@@ -5,6 +5,7 @@ import { useUserStore } from "./user";
 
 export const useChatStore = defineStore("chat", () => {
   const messages = ref([]);
+  const isLoading = ref(false);
 
   const userStore = useUserStore();
 
@@ -24,6 +25,11 @@ export const useChatStore = defineStore("chat", () => {
         return;
       }
       console.log("chatHistory:", response.data.chatHistory);
+      // Filter out messages with empty content
+      if (!chatHistory.length) {
+        console.error("No chat history found for user:", userStore.userId);
+        return;
+      }
 
       messages.value = chatHistory
         .flatMap((msg) => [
@@ -35,7 +41,33 @@ export const useChatStore = defineStore("chat", () => {
       console.error("Error loading chat history:", error);
     }
   };
+  const sendMessage = async (message) => {
 
+    if(!message.trim() || !userStore.userId) return;
 
-  return { messages, loadChatHistory };
+    messages.value.push({ role: "user", content: message });
+    isLoading.value = true;
+
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/chat`,
+        { userId: userStore.userId, message }
+      );
+      const reply = response.data.response;
+      console.log("response:", response);
+
+      console.log("reply:", reply);
+
+      if (!reply || typeof reply !== "string") {
+        console.error("Invalid reply format:", reply);
+        return;
+      }
+      messages.value.push({ role: "ai", content: reply });
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+    isLoading.value = false;
+  };
+
+  return { messages, loadChatHistory, sendMessage, isLoading };
 });

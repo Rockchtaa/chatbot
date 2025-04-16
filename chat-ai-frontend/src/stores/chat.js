@@ -6,6 +6,8 @@ import { useUserStore } from "./user";
 export const useChatStore = defineStore("chat", () => {
   const messages = ref([]);
   const isLoading = ref(false);
+  const inputMessage = ref('');
+
 
   const userStore = useUserStore();
 
@@ -67,7 +69,9 @@ export const useChatStore = defineStore("chat", () => {
       console.error("Error sending message:", error);
     }
     isLoading.value = false;
+    inputMessage.value = ''; 
   };
+  
 
-  return { messages, loadChatHistory, sendMessage, isLoading };
+  return { messages, loadChatHistory, sendMessage, isLoading, inputMessage };
 });

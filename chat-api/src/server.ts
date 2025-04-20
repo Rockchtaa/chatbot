@@ -6,7 +6,6 @@ import { runGemini } from "./gemini";
 import { db } from "./config/database";
 import { chats, users } from "./db/schema";
 import { eq } from "drizzle-orm";
-import { ChatCompletionMessageParam } from "openai/resources";
 
 dotenv.config();
 

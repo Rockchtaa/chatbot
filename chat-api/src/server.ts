@@ -6,6 +6,7 @@ import { runGemini } from "./gemini";
 import { db } from "./config/database";
 import { chats, users } from "./db/schema";
 import { eq } from "drizzle-orm";
+import { chatLimiter } from "../middlewares/chatLimiter";
 
 dotenv.config();
 
@@ -27,7 +28,7 @@ app.post(
   "/register-user",
   async (req: Request, res: Response): Promise<any> => {
     const { username, email } = req.body;
-
+    console.log('Request Body:', req.body);
     if (!username || !email) {
       return res.status(400).json({ error: "Username and email are required" });
     }
@@ -70,7 +71,7 @@ app.post(
   }
 );
 // send message to gemini and get response
-app.post("/chat", async (req: Request, res: Response): Promise<any> => {
+app.post("/chat", chatLimiter, async (req: Request, res: Response): Promise<any> => {
   const { userId, message } = req.body;
 
   if (!userId || !message) {

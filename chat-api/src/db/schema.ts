@@ -1,22 +1,33 @@
 import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
+export const users = pgTable("users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  user_id: text("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), 
+  title: text("title").notNull(), // title of the conversation
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(), 
+});
+
 export const chats = pgTable("chats", {
   id: serial("id").primaryKey(),
-  user_id: text("user_id").notNull(),
+  conversation_id: serial("conversation_id").notNull().references(() => conversations.id, { onDelete: 'cascade' }), 
   message: text("message").notNull(),
   reply: text("reply").notNull(),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const users = pgTable("users", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull(),
-  created_at: timestamp("created_at").defaultNow().notNull(),
-});
-
 // Type inference for Drizzle queries
-export type ChatInsert = typeof chats.$inferSelect;
-export type ChatSelect = typeof chats.$inferInsert;
-export type UserInsert = typeof users.$inferSelect;
-export type UserSelect = typeof users.$inferInsert;
+export type UserInsert = typeof users.$inferInsert;
+export type UserSelect = typeof users.$inferSelect;
+export type ConversationInsert = typeof conversations.$inferInsert;
+export type ConversationSelect = typeof conversations.$inferSelect;
+export type ChatInsert = typeof chats.$inferInsert;
+export type ChatSelect = typeof chats.$inferSelect;

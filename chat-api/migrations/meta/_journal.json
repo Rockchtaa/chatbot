@@ -8,6 +8,20 @@
       "when": 1744662943316,
       "tag": "0000_true_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1752070709554,
+      "tag": "0001_salty_sentinels",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1752152886118,
+      "tag": "0002_odd_white_queen",
+      "breakpoints": true
     }
   ]
 }

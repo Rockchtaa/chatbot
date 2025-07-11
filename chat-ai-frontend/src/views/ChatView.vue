@@ -17,26 +17,47 @@ const scrollToBottom = () => {
 };
 
 onMounted(() => {
-  // Load conversations first, then messages for the selected/first conversation
   chatStore.loadConversations().then(() => {
-    // messages for the active conversation will be loaded by setActiveConversation
+    // If no active conversation or no conversations exist, show initial options
+    if (!chatStore.currentConversationId && chatStore.conversations.length === 0) {
+      chatStore.showInitialOptions = true;
+      chatStore.currentConversationTitle = 'Welcome'; // Set a default title
+    } else if (chatStore.currentConversationId) {
+      // If a conversation is loaded, hide initial options
+      chatStore.showInitialOptions = false;
+    }
     scrollToBottom();
   });
 });
 
-// Watch for changes in messages to scroll to bottom automatically
 watch(chatStore.messages, () => {
   scrollToBottom();
 }, { deep: true });
 
-// Watch for changes in currentConversationId to potentially clear messages
-// This is already implicitly handled by setActiveConversation calling loadChatMessages,
-// but good to ensure if needed.
-// watch(chatStore.currentConversationId, () => {
-//   if (chatStore.currentConversationId === null) {
-//     chatStore.messages = []; // Clear messages for new conversation
-//   }
-// });
+// Watch for starting a new conversation to show options if needed
+watch(() => chatStore.currentConversationId, (newId) => {
+  if (newId === null) {
+    chatStore.showInitialOptions = true; // Show options when starting a new chat
+    chatStore.currentConversationTitle = 'Welcome';
+  } else {
+    chatStore.showInitialOptions = false; // Hide otherwise
+  }
+});
+
+// Handler for initial option buttons
+const handleInitialOption = (option) => {
+    if (option === 'normal') {
+        chatStore.startNewConversation(); 
+        chatStore.showInitialOptions = false; 
+    } else if (option === 'absences') {
+        chatStore.sendTimeTrackQuery('absences');
+      
+    } else if (option === 'projects') {
+        chatStore.sendTimeTrackQuery('projects');
+      
+    }
+};
+
 </script>
 
 <template>
@@ -74,19 +95,36 @@ watch(chatStore.messages, () => {
 
       <div class="flex-1 flex flex-col">
         <div class="p-4 bg-gray-800 border-b border-gray-700 text-center">
-          <h2 class="text-xl font-semibold">{{ chatStore.currentConversationTitle || 'New Chat' }}</h2>
+          <h2 class="text-xl font-semibold">{{ chatStore.currentConversationTitle || 'Welcome' }}</h2>
         </div>
 
         <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900">
-          <div v-for="(msg, index) in chatStore.messages" :key="index" class="flex items-start mb-4"
-            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
 
-            <div class="rounded-lg shadow-md px-4 py-3 max-w-xs md:max-w-md break-words"
-              :class="msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'">
-              <div v-html="msg.formattedContent || msg.content" class="message-content"></div>
-              <div class="text-xs text-gray-400 mt-2">{{ msg.timestamp }}</div>
-            </div>
+          <div v-if="chatStore.showInitialOptions" class="flex flex-col items-center justify-center h-full text-center">
+            <h3 class="text-2xl font-bold mb-6">How can I help you today?</h3>
+            <div class="space-y-4">
+              <button @click="handleInitialOption('absences')"
+                class="block w-full px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-white font-medium text-lg transition-colors duration-200">
+                Ask about workers (projects or absent)
+              </button>
+              <button @click="handleInitialOption('normal')"
+                class="block w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-medium text-lg transition-colors duration-200">
+                Start a normal conversation
+              </button>
+              </div>
           </div>
+
+          <template v-else>
+            <div v-for="(msg, index) in chatStore.messages" :key="index" class="flex items-start mb-4"
+              :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+
+              <div class="rounded-lg shadow-md px-4 py-3 max-w-xs md:max-w-md break-words"
+                :class="msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'">
+                <div v-html="msg.formattedContent || msg.content" class="message-content"></div>
+                <div class="text-xs text-gray-400 mt-2">{{ msg.timestamp }}</div>
+              </div>
+            </div>
+          </template>
 
           <div v-if="chatStore.isLoading" class="flex items-center justify-center p-4">
             <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
@@ -99,10 +137,11 @@ watch(chatStore.messages, () => {
               @keydown.enter.exact.prevent="chatStore.sendMessage(chatStore.inputMessage)" rows="1"
               placeholder="Type your message..."
               class="w-full p-3 pr-12 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              style="min-height: 44px; max-height: 120px; overflow-y: auto;"></textarea>
+              style="min-height: 44px; max-height: 120px; overflow-y: auto;"
+              :disabled="chatStore.showInitialOptions"> </textarea>
             <button @click="chatStore.sendMessage(chatStore.inputMessage)"
-              class="absolute right-2 bottom-2 p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              class="absolute right-2 bottom-2 p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white"
+              :disabled="chatStore.showInitialOptions"> <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path
                   d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
               </svg>

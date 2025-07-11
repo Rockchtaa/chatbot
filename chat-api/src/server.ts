@@ -8,6 +8,7 @@ import { chats, users, conversations } from "./db/schema";
 import { eq, desc, and } from "drizzle-orm"; 
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { fetchCurrentAbsences, fetchProjectInfo } from './timetrack';
 
 dotenv.config();
 
@@ -279,6 +280,87 @@ app.post("/get-messages", authenticateToken, async (req: Request, res: Response)
     } catch (error) {
         console.error("Error fetching chat history:", error);
         return res.status(500).json({ error: "Failed to fetch chat history" });
+    }
+});
+
+// NEW ENDPOINT: Handle TimeTrack specific queries
+app.post("/timetrack-query", authenticateToken, async (req: Request, res: Response): Promise<any> => {
+    const { userId } = (req as any).user;
+    const { queryType, projectName, conversationId } = req.body; // conversationId now optional for saving
+
+    if (!queryType) {
+        return res.status(400).json({ error: "queryType is required" });
+    }
+
+    let responseMessage = "";
+    let userMessageContent = ""; // To save user's intent to db
+
+    try {
+        switch (queryType) {
+            case "absences":
+                userMessageContent = "I asked about workers absent/on leave.";
+                responseMessage = await fetchCurrentAbsences();
+                break;
+            case "projects":
+                userMessageContent = projectName ? `I asked about project: ${projectName}.` : "I asked about worker projects.";
+                responseMessage = await fetchProjectInfo(projectName); // Pass projectName if provided
+                break;
+            default:
+                return res.status(400).json({ error: "Invalid query type" });
+        }
+
+        // --- Conversation Saving Logic (similar to /chat) ---
+        let currentConversationId = conversationId;
+        let conversationTitle = "";
+
+        // If no conversation ID, create a new one, specifically titled for TimeTrack
+        if (!currentConversationId) {
+            conversationTitle = `TimeTrack: ${queryType}`; // Dynamic title
+            const newConversation = await db.insert(conversations).values({
+                user_id: userId,
+                title: conversationTitle,
+                created_at: new Date(),
+                updated_at: new Date(),
+            }).returning({ id: conversations.id });
+
+            if (!newConversation[0]) {
+                throw new Error("Failed to create new conversation for TimeTrack query.");
+            }
+            currentConversationId = newConversation[0].id;
+        } else {
+            // If conversation ID exists, ensure it belongs to the user and update its timestamp
+            const existingConversation = await db.select()
+                .from(conversations)
+                .where(and(eq(conversations.id, currentConversationId), eq(conversations.user_id, userId)));
+
+            if (!existingConversation.length) {
+                return res.status(404).json({ error: "Conversation not found or not owned by user." });
+            }
+            // Update updated_at timestamp
+            await db.update(conversations)
+                .set({ updated_at: new Date() })
+                .where(eq(conversations.id, currentConversationId));
+
+            conversationTitle = existingConversation[0].title; // Keep original title
+        }
+
+        // Save user's "intent" message and the AI's response to the database
+        await db.insert(chats).values({
+            conversation_id: currentConversationId,
+            message: userMessageContent, // User's message about the query
+            reply: responseMessage, // AI's response from TimeTrack API
+            created_at: new Date(),
+        });
+
+        return res.status(200).json({
+            response: responseMessage,
+            conversationId: currentConversationId,
+            conversationTitle: conversationTitle
+        });
+
+    } catch (error) {
+        console.error("Error in /timetrack-query:", error);
+        return res.status(500).json({ error: "Failed to retrieve TimeTrack data" });
     }
 });
 

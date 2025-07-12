@@ -9,6 +9,8 @@ import { eq, desc, and } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { fetchCurrentAbsences, fetchProjectInfo } from './timetrack';
+import crypto from 'crypto';
+import { sendVerificationEmail } from './emailService';
 
 dotenv.config();
 
@@ -72,28 +74,37 @@ app.post("/register", async (req: Request, res: Response): Promise<any> => {
 
         const userId = email.replace(/[^a-zA-Z0-9]/g, "_");
         const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Generate a unique verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex');
 
-        await db.insert(users).values({ id: userId, name: username, email, password: hashedPassword });
+        // Save the user with the token and verification status
+        await db.insert(users).values({ 
+            id: userId, 
+            name: username, 
+            email, 
+            password: hashedPassword,
+            email_verification_token: verificationToken,
+            is_email_verified: false, // Explicitly set to false
+        });
 
-        const streamUserResponse = await chatClient.queryUsers({ id: { $eq: userId } });
-        if (!streamUserResponse.users.length) {
-            await chatClient.upsertUser({
-                id: userId,
-                name: username,
-                email: email,
-                role: "user",
-            });
-        }
+        // Send the confirmation email
+        await sendVerificationEmail(email, username, verificationToken); 
+        
+        // Do NOT log the user in or return a JWT token here.
+        // The user must verify their email first.
 
-        const token = jwt.sign({ userId, username, email }, JWT_SECRET, { expiresIn: '1h' });
+        return res.status(201).json({ 
+            message: "Registration successful. Please check your email to verify your account." 
+        });
 
-        return res.status(201).json({ message: "User registered successfully", userId, username, token });
     } catch (error) {
         console.error("Error registering user:", error);
         return res.status(500).json({ error: "Failed to register user" });
     }
 });
 
+// Login User
 // Login User
 app.post("/login", async (req: Request, res: Response): Promise<any> => {
     const { email, password } = req.body;
@@ -103,21 +114,41 @@ app.post("/login", async (req: Request, res: Response): Promise<any> => {
     }
 
     try {
-        const user = await db.select().from(users).where(eq(users.email, email));
+        const userResult = await db.select().from(users).where(eq(users.email, email));
 
-        if (user.length === 0) {
+        if (userResult.length === 0) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        const isPasswordValid = await bcrypt.compare(password, user[0].password);
+        const user = userResult[0];
+
+        const isPasswordValid = await bcrypt.compare(password, user.password);
 
         if (!isPasswordValid) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        const token = jwt.sign({ userId: user[0].id, username: user[0].name, email: user[0].email }, JWT_SECRET, { expiresIn: '1h' });
+        // **CHECK VERIFICATION STATUS**
+        if (!user.is_email_verified) {
+            return res.status(403).json({ 
+                error: "Email not verified. Please check your inbox for the verification link." 
+            });
+        }
 
-        return res.status(200).json({ message: "Login successful", userId: user[0].id, username: user[0].name, token });
+        // Upsert user to Stream Chat only after successful login
+        const streamUserResponse = await chatClient.queryUsers({ id: { $eq: user.id } });
+        if (!streamUserResponse.users.length) {
+            await chatClient.upsertUser({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: "user",
+            });
+        }
+
+        const token = jwt.sign({ userId: user.id, username: user.name, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+
+        return res.status(200).json({ message: "Login successful", userId: user.id, username: user.name, token });
     } catch (error) {
         console.error("Error logging in user:", error);
         return res.status(500).json({ error: "Failed to log in" });
@@ -361,6 +392,38 @@ app.post("/timetrack-query", authenticateToken, async (req: Request, res: Respon
     } catch (error) {
         console.error("Error in /timetrack-query:", error);
         return res.status(500).json({ error: "Failed to retrieve TimeTrack data" });
+    }
+});
+
+app.get("/verify-email", async (req: Request, res: Response): Promise<any> => {
+    const { token } = req.query;
+
+    if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: "Verification token is missing or invalid." });
+    }
+
+    try {
+        // Find the user with the matching verification token
+        const user = await db.select().from(users).where(eq(users.email_verification_token, token));
+
+        if (user.length === 0) {
+            return res.status(404).json({ error: "Invalid verification token." });
+        }
+
+        // Update the user's status to verified and clear the token
+        await db.update(users)
+            .set({ 
+                is_email_verified: true,
+                email_verification_token: null // Clear the token so it can't be reused
+            })
+            .where(eq(users.id, user[0].id));
+
+        // You can redirect the user to your login page or show a success message
+        return res.status(200).send("<h1>Email Verified!</h1><p>Your email has been successfully verified. You can now log in.</p>");
+
+    } catch (error) {
+        console.error("Error verifying email:", error);
+        return res.status(500).json({ error: "Failed to verify email." });
     }
 });
 

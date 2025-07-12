@@ -22,6 +22,13 @@
       "when": 1752152886118,
       "tag": "0002_odd_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1752322159365,
+      "tag": "0003_living_karen_page",
+      "breakpoints": true
     }
   ]
 }

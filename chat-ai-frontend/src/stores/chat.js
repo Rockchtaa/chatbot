@@ -14,6 +14,7 @@ export const useChatStore = defineStore("chat", () => {
 
   const isLoading = ref(false);
   const inputMessage = ref("");
+   const showInitialOptions = ref(true);
 
   // --- Actions for Conversations ---
 
@@ -207,7 +208,9 @@ export const useChatStore = defineStore("chat", () => {
       if (currentConversationId.value) {
         payload.conversationId = currentConversationId.value;
       }
-
+         if (showInitialOptions.value) {
+      showInitialOptions.value = false;
+    }
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/chat`,
         payload,
@@ -265,6 +268,92 @@ export const useChatStore = defineStore("chat", () => {
     }
   };
 
+  // NEW ACTION: Send TimeTrack specific queries
+const sendTimeTrackQuery = async (queryType, projectName = null) => {
+    if (!userStore.isAuthenticated()) return;
+
+    showInitialOptions.value = false;
+
+    let userMessageContent = "";
+    if (queryType === 'absences') {
+        userMessageContent = "I asked about workers absent/on leave.";
+    } else if (queryType === 'projects') {
+        userMessageContent = projectName ? `I asked about project: ${projectName}.` : "I asked about worker projects.";
+    }
+
+    messages.value.push({
+      role: "user",
+      content: userMessageContent,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
+    isLoading.value = true;
+    try {
+      const payload = { queryType, projectName };
+      if (currentConversationId.value) {
+        payload.conversationId = currentConversationId.value; // Send current convo ID
+      }
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/timetrack-query`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${userStore.token}`,
+          },
+        }
+      );
+      const reply = response.data.response;
+      const returnedConversationId = response.data.conversationId; // NEW
+      const returnedConversationTitle = response.data.conversationTitle; // NEW
+
+
+      if (!reply || typeof reply !== "string") {
+        console.error("Invalid TimeTrack query reply format:", reply);
+        return;
+      }
+
+      // Update conversation state based on backend response
+      if (!currentConversationId.value && returnedConversationId) {
+        currentConversationId.value = returnedConversationId;
+        currentConversationTitle.value = returnedConversationTitle;
+        conversations.value.unshift({ // Add to the beginning
+            id: returnedConversationId,
+            title: returnedConversationTitle,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        });
+      } else if (currentConversationId.value && returnedConversationId && currentConversationId.value === returnedConversationId) {
+        const index = conversations.value.findIndex(c => c.id === currentConversationId.value);
+        if (index !== -1) {
+            conversations.value[index].updated_at = new Date().toISOString();
+            conversations.value.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+        }
+      }
+
+      messages.value.push({
+        role: "ai",
+        content: reply,
+        formattedContent: formatMessage(reply),
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    } catch (error) {
+      console.error("Error sending TimeTrack query:", error);
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        userStore.logout();
+      }
+      messages.value.push({ // Show an error message to the user
+        role: 'ai',
+        content: "Sorry, I encountered an error while fetching that information. Please try again later.",
+        formattedContent: "Sorry, I encountered an error while fetching that information. Please try again later.",
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+
   return {
     conversations,
     currentConversationId,
@@ -279,5 +368,7 @@ export const useChatStore = defineStore("chat", () => {
     loadChatMessages,
     sendMessage,
     formatMessage,
+    showInitialOptions,
+    sendTimeTrackQuery,
   };
 });

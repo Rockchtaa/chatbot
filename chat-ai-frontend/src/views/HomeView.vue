@@ -14,14 +14,11 @@ const password = ref('');
 const isRegistering = ref(true);
 const loading = ref(false);
 const error = ref('');
-
-// Automatically redirect if already logged in
-if (userStore.isAuthenticated()) {
-  router.push('/chat');
-}
+const successMessage = ref(''); 
 
 const authenticateUser = async () => {
   error.value = '';
+  successMessage.value = ''; 
 
   if (!email.value || !password.value || (isRegistering.value && !username.value)) {
     error.value = 'Please fill in all required fields.';
@@ -30,20 +27,25 @@ const authenticateUser = async () => {
 
   loading.value = true;
   try {
-    let endpoint = isRegistering.value ? '/register' : '/login';
-    let payload = isRegistering.value
-      ? { username: username.value, email: email.value, password: password.value }
-      : { email: email.value, password: password.value };
-
-    const { data } = await axios.post(`${import.meta.env.VITE_API_URL}${endpoint}`, payload);
-
-    userStore.setUser({
-      userId: data.userId,
-      username: data.username,
-      token: data.token, // Save the received token
-    });
-
-    router.push('/chat');
+    if (isRegistering.value) {
+      const payload = { username: username.value, email: email.value, password: password.value };
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/register`, payload);
+      // Display the success message from the backend
+      successMessage.value = data.message;
+      username.value = '';
+      email.value = '';
+      password.value = '';
+    } else {
+      const payload = { email: email.value, password: password.value };
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/login`, payload);
+      
+      userStore.setUser({
+        userId: data.userId,
+        username: data.username,
+        token: data.token,
+      });
+      router.push('/chat');
+    }
   } catch (err) {
     console.error(`Error ${isRegistering.value ? 'registering' : 'logging in'} user:`, err);
     if (axios.isAxiosError(err) && err.response) {
@@ -88,7 +90,9 @@ const authenticateUser = async () => {
         {{ loading ? (isRegistering ? 'Registering...' : 'Logging in...') : (isRegistering ? 'Register' : 'Login') }}
       </button>
 
-      <p v-if="error" class="text-red-400 text-center mt-4 text-sm">{{ error }}</p>
+       <p v-if="error" class="text-red-400 text-center mt-4 text-sm">{{ error }}</p>
+      
+      <p v-if="successMessage" class="text-green-400 text-center mt-4 text-sm">{{ successMessage }}</p>
     </div>
   </div>
 </template>

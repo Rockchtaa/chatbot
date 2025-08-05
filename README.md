@@ -1,5 +1,5 @@
 In Bearbeitung:
-# 📚 Internes Chatbot-System mit Azure AI & Sage API
+# 📚 Internes Chatbot-System mit Azure AI
 
 Ein interner, KI-gestützter Chatbot zur Beantwortung von Mitarbeitendenanfragen basierend auf unternehmensinternen Daten. Der Chatbot nutzt Azure AI Services und greift über die Sage API auf aktuelle Abwesenheitsinformationen von Mitarbeitenden zu. Externe Datenquellen werden bewusst ausgeschlossen.
 

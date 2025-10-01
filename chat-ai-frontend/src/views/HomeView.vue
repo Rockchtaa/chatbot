@@ -1,71 +1,133 @@
 <script setup>
-import { ref } from 'vue';
-import axios from 'axios';
-import { useUserStore } from '../stores/user';
-import { useRouter } from 'vue-router';
-import robotImage from '../assets/robot.png';
-const router = useRouter();
-const userStore = useUserStore();
+import { useChatStore } from '../stores/chat';
+import Header from '../components/Header.vue';
+import { onMounted, nextTick } from 'vue';
 
+const chatStore = useChatStore();
 
-const name = ref('');
-const email = ref('');
-const loading = ref(false);
-const error = ref('');
+const scrollToBottom = () => {
+  nextTick(() => {
+    const chatContainer = document.getElementById('chat-container');
+    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+  });
+};
 
-const createUser = async () => {
-  if (!name.value || !email.value) {
-    error.value = 'Name and email are required';
-    return;
-  }
+onMounted(() => {
+  chatStore.loadChatHistory().then(scrollToBottom);
+});
 
-  loading.value = true;
-  error.value = '';
-
-  try {
-    const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/register-user`, {
-      username: name.value,
-      email: email.value,
-    });
-
-    userStore.setUser({
-      userId: data.userId,
-      username: data.username,
-    });
-
-    router.push('/chat');
-  } catch (error) {
-
-    console.error('Error creating user:', error);
-    error.value = 'Failed to create user. Please try again.';
-
-  } finally {
-    loading.value = false;
-  }
-
-
-
+const sendMessage = () => {
+  chatStore.sendMessage(chatStore.inputMessage);
+  scrollToBottom();
 };
 </script>
 
 <template>
-  <div class="h-screen flex items-center justify-center bg-gray-900 text-white">
-    <div class="p-8 bg-gray-800 rounded-lg shadow-lg w-full max-w-md">
-      <img :src="robotImage" alt="" class="mx-auto w-24 h-24 mb-4" />
-      <h1 class="text-2xl font-semibold mb-4 text-center">
-        Welcome To Chat AI
-      </h1>
+  <div class="flex flex-col h-screen bg-gray-900 text-white">
+    <Header />
 
-      <input type="text" class="w-full p-2 mb-2 bg-gray-700 text-white rounded-lg focus:outline-none" placeholder="Name"
-        v-model="name" />
-      <input type="email" class="w-full p-2 mb-2 bg-gray-700 text-white rounded-lg focus:outline-none"
-        placeholder="Email" v-model="email" />
+    <!-- Chat messages -->
+    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4">
+      <div v-for="(msg, index) in chatStore.messages" :key="index" class="flex items-start mb-4"
+        :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
 
-      <button @click="createUser" class="w-full p-2 bg-blue-500 rounded-lg" :disabled="loading">
-        {{ loading ? 'Logging in...' : 'Start Chat' }}
-      </button>
+        <!-- Message -->
+        <div class="rounded-lg shadow-md px-4 py-3 max-w-xs md:max-w-md break-words"
+          :class="msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'">
+          <div v-html="msg.formattedContent || msg.content" class="message-content"></div>
+          <div class="text-xs text-gray-400 mt-2">{{ msg.timestamp }}</div>
+        </div>
+      </div>
 
-      <p v-if="error" class="text-red-400 text-center mt-2">{{ error }}</p>
+      <!-- Loading spinner -->
+      <div v-if="chatStore.isLoading" class="flex items-center justify-center p-4">
+        <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    </div>
+
+    <!-- Chat input -->
+    <div class="p-4 bg-gray-800 border-t border-gray-700 flex items-center space-x-3">
+      <div class="flex-1 relative">
+        <textarea v-model="chatStore.inputMessage"
+          @keydown.enter.exact.prevent="sendMessage" rows="1"
+          placeholder="Type your message..."
+          class="w-full p-3 pr-12 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          style="min-height: 44px; max-height: 120px; overflow-y: auto;"></textarea>
+        <button @click="sendMessage"
+          class="absolute right-2 bottom-2 p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 </template>
+
+<style>
+.message-content code {
+  font-family: monospace;
+  background-color: rgba(30, 41, 59, 0.8);
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.message-content pre {
+  background-color: rgba(30, 41, 59, 0.5);
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.message-content ul {
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+  list-style-type: disc;
+}
+
+.message-content ol {
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+  list-style-type: decimal;
+}
+
+.message-content h1 {
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin: 0.75rem 0;
+}
+
+.message-content h2 {
+  font-size: 1.125rem;
+  font-weight: bold;
+  margin: 0.5rem 0;
+}
+
+.message-content h3 {
+  font-size: 1rem;
+  font-weight: bold;
+  margin: 0.5rem 0;
+}
+
+.message-content a {
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+.message-content a:hover {
+  text-decoration: underline;
+}
+
+.message-content blockquote {
+  border-left: 4px solid #6b7280;
+  padding-left: 0.75rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  margin: 0.5rem 0;
+  font-style: italic;
+  background-color: rgba(30, 41, 59, 0.3);
+}
+</style>

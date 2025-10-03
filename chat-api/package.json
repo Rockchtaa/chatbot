@@ -11,14 +11,19 @@
   "author": "yassine elbrahmi",
   "license": "MIT",
   "dependencies": {
+    "@azure-rest/ai-inference": "^1.0.0-beta.6",
+    "@azure/identity": "^4.12.0",
+    "@azure/openai": "^2.0.0",
+    "@azure/search-documents": "^12.1.0",
     "@google/genai": "^0.8.0",
     "@google/generative-ai": "^0.24.0",
     "@neondatabase/serverless": "^1.0.0",
+    "azure-openai": "^0.9.4",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.41.0",
     "express": "^5.1.0",
-    "openai": "^4.94.0",
+    "openai": "^4.104.0",
     "stream-chat": "^8.59.0"
   },
   "devDependencies": {
